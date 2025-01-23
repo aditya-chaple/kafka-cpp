@@ -63,21 +63,58 @@ int main(int argc, char* argv[]) {
         close(server_fd);
         return 1;
     }
+
     std::cout << "Client connected\n";
-     // Prepare response: message_size (4 bytes) + correlation_id (4 bytes)
-    int32_t message_size = htonl(0); // Hardcoded to 0 for now
-    int32_t correlation_id = htonl(7); // Hardcoded correlation_id = 7
+    //  // Prepare response: message_size (4 bytes) + correlation_id (4 bytes)
+    // int32_t message_size = htonl(0); // Hardcoded to 0 for now
+    // int32_t correlation_id = htonl(7); // Hardcoded correlation_id = 7
 
-    char response[8];
-    memcpy(response, &message_size, 4);
-    memcpy(response + 4, &correlation_id, 4);
+    // char response[8];
+    // memcpy(response, &message_size, 4);
+    // memcpy(response + 4, &correlation_id, 4);
 
-    // Send the response to the client
-    ssize_t bytes_sent = send(client_fd, response, sizeof(response), 0);
-    if (bytes_sent < 0) {
-        std::cerr << "Failed to send response to client" << std::endl;
+    // // Send the response to the client
+    // ssize_t bytes_sent = send(client_fd, response, sizeof(response), 0);
+    // if (bytes_sent < 0) {
+    //     std::cerr << "Failed to send response to client" << std::endl;
+    // } else {
+    //     std::cout << "Response sent to client\n";
+    // }
+
+    
+    // Read request from the client
+    char request_buffer[1024];
+    ssize_t bytes_received = recv(client_fd, request_buffer, sizeof(request_buffer), 0);
+    if (bytes_received < 0) {
+        std::cerr << "Failed to read request from client" << std::endl;
+        close(client_fd);
+        close(server_fd);
+        return 1;
+    }
+
+    // Extract correlation_id from the request
+    if (bytes_received >= 12) { // Ensure enough bytes for header v2
+        int32_t correlation_id;
+        memcpy(&correlation_id, request_buffer + 4 + 2 + 2, 4); // Offset for message_size (4) + api_key (2) + api_version (2)
+        correlation_id = ntohl(correlation_id); // Convert to host byte order
+
+        // Prepare response: message_size (4 bytes) + correlation_id (4 bytes)
+        int32_t message_size = htonl(0); // Hardcoded to 0 for now
+        int32_t response_correlation_id = htonl(correlation_id);
+
+        char response[8];
+        memcpy(response, &message_size, 4);
+        memcpy(response + 4, &response_correlation_id, 4);
+
+        // Send the response to the client
+        ssize_t bytes_sent = send(client_fd, response, sizeof(response), 0);
+        if (bytes_sent < 0) {
+            std::cerr << "Failed to send response to client" << std::endl;
+        } else {
+            std::cout << "Response sent to client\n";
+        }
     } else {
-        std::cout << "Response sent to client\n";
+        std::cerr << "Invalid request received from client" << std::endl;
     }
 
     close(client_fd);
